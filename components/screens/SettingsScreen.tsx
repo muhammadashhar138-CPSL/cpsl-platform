@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { signOut } from 'next-auth/react';
 import { useStore } from '@/lib/store';
 import AppLayout from '../AppLayout';
 import { Settings } from '@/lib/settingsTypes';
@@ -31,36 +30,26 @@ export default function SettingsScreen() {
   });
 
   useEffect(() => {
-    const loadSettings = async () => {
-      setLoading(true);
+    // Load settings from localStorage instead of API
+    setLoading(false);
+    const savedSettings = localStorage.getItem('cpsl_settings');
+    if (savedSettings) {
       try {
-        const res = await fetch('/api/settings');
-        if (res.ok) {
-          const data = await res.json();
-          setSettings(data);
-        }
+        setSettings(JSON.parse(savedSettings));
       } catch (err) {
-        console.error('Failed to load settings:', err);
-      } finally {
-        setLoading(false);
+        console.error('Failed to parse settings:', err);
       }
-    };
-    loadSettings();
+    }
   }, []);
 
   const saveSettings = async () => {
     setSaving(true);
     try {
-      const res = await fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings),
-      });
-      if (res.ok) {
-        dispatch({ type: 'SET_SETTINGS', settings });
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2000);
-      }
+      // Save to localStorage instead of API
+      localStorage.setItem('cpsl_settings', JSON.stringify(settings));
+      dispatch({ type: 'SET_SETTINGS', settings });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     } catch (err) {
       console.error('Failed to save settings:', err);
     } finally {
@@ -68,9 +57,11 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleLogout = async () => {
-    await signOut({ redirect: true, callbackUrl: '/' });
-    dispatch({ type: 'LOGOUT' });
+  const handleLogout = () => {
+    // Client-side logout
+    dispatch({ type: 'SET_USER', user: null });
+    dispatch({ type: 'SET_AUTHENTICATED', isAuthenticated: false });
+    dispatch({ type: 'SET_SCREEN', screen: 'login' });
   };
 
   const configureIntegration = (service: 'slack' | 'teams' | 'webhooks') => {
