@@ -189,12 +189,12 @@ export default function DashboardScreen() {
       setChainLatency(sc.latency);
       setChainEvents(prev => [...prev, { domain: e.domain, label: e.label, time: getTime(), conf: e.conf }]);
       step++;
-      // Realistic: 4-6 seconds between chain steps
-      chainTimers.current.push(setTimeout(runStep, 4000 + Math.random() * 2000));
+      // Realistic: 6-10 seconds between chain steps (slower for real-world simulation)
+      chainTimers.current.push(setTimeout(runStep, 6000 + Math.random() * 4000));
     };
 
-    // First anomaly appears after 3 seconds
-    chainTimers.current.push(setTimeout(runStep, 3000));
+    // First anomaly appears after 5 seconds
+    chainTimers.current.push(setTimeout(runStep, 5000));
     } catch (error) {
       console.error('Error in fireChain:', error);
     }
@@ -206,27 +206,35 @@ export default function DashboardScreen() {
       globalStartMonitoring(site.id);
       dispatch({ type: 'UPDATE_SITE', site: { ...site, monitoring: true } });
 
-      // Realistic: one event every 2.5-4 seconds
+      // Realistic: one event every 5-8 seconds (slower for realistic simulation)
       monTimer.current = setInterval(() => {
         const domains: Domain[] = ['cctv', 'access', 'machine', 'network'];
         const d = domains[Math.floor(Math.random() * 4)];
         addFeedItem(d, getNorm(site.type || 'warehouse', d), false);
         setLatency(Math.floor(Math.random() * 60 + 180));
         setCpuUsage(Math.floor(Math.random() * 15 + 18));
-      }, 2500 + Math.random() * 1500);
+      }, 5000 + Math.random() * 3000);
 
-      // TEST: Show first incident immediately to verify modal works
-      setTimeout(() => {
-        console.log('TEST: Showing first incident immediately');
-        fireChain(0);
-      }, 1000);
-
-      // Demo timing: chains fire after 10s, 30s, 50s (faster for demo)
+      // Realistic: Incidents fire at realistic intervals
+      // First incident after 40-50 seconds
+      // Second incident after 90-110 seconds
+      // Third incident after 150-180 seconds
       chainFired.current = [false, false, false];
-      console.log('Setting up chain timers at 10s, 30s, 50s');
-      chainTimers.current.push(setTimeout(() => { console.log('Chain 0 timer fired!'); if (!chainFired.current[0]) { chainFired.current[0] = true; fireChain(0); } }, 10000));
-      chainTimers.current.push(setTimeout(() => { console.log('Chain 1 timer fired!'); if (!chainFired.current[1]) { chainFired.current[1] = true; fireChain(1); } }, 30000));
-      chainTimers.current.push(setTimeout(() => { console.log('Chain 2 timer fired!'); if (!chainFired.current[2]) { chainFired.current[2] = true; fireChain(2); } }, 50000));
+      console.log('Setting up realistic incident timers');
+      chainTimers.current.push(setTimeout(() => {
+        console.log('Incident 0 detected!');
+        if (!chainFired.current[0]) { chainFired.current[0] = true; fireChain(0); }
+      }, 40000 + Math.random() * 10000));
+
+      chainTimers.current.push(setTimeout(() => {
+        console.log('Incident 1 detected!');
+        if (!chainFired.current[1]) { chainFired.current[1] = true; fireChain(1); }
+      }, 90000 + Math.random() * 20000));
+
+      chainTimers.current.push(setTimeout(() => {
+        console.log('Incident 2 detected!');
+        if (!chainFired.current[2]) { chainFired.current[2] = true; fireChain(2); }
+      }, 150000 + Math.random() * 30000));
     } else {
       console.log('handleStartMonitoring: NO SITE AVAILABLE');
     }
