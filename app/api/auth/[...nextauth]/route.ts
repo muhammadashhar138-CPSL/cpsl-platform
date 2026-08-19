@@ -1,6 +1,21 @@
 import NextAuth from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 
+// Determine the correct URL based on environment
+const getAuthUrl = () => {
+  if (process.env.NEXTAUTH_URL) {
+    return process.env.NEXTAUTH_URL;
+  }
+
+  // Fallback for development
+  if (process.env.NODE_ENV === 'development') {
+    return 'http://localhost:3000';
+  }
+
+  // Fallback for production (should use env var)
+  return 'https://cpsl-one.vercel.app';
+};
+
 const handler = NextAuth({
   providers: [
     CredentialsProvider({
