@@ -1,21 +1,72 @@
 'use client';
 
 import { useState } from 'react';
+import { signIn } from 'next-auth/react';
 import { useStore } from '@/lib/store';
 
 export default function LoginScreen() {
   const { dispatch } = useStore();
-  const [email, setEmail] = useState('ashhar@cpsl.co.uk');
+  const [email, setEmail] = useState('');
   const [pass, setPass] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const login = () => {
-    if (!email) return;
+  const login = async () => {
+    if (!email || !pass) {
+      setError('Please enter both email and password');
+      return;
+    }
+    setError('');
     setLoading(true);
-    setTimeout(() => {
-      dispatch({ type: 'SET_USER', user: { name: 'Muhammad Ashhar', email } });
-      dispatch({ type: 'SET_SCREEN', screen: 'multiSite' });
-    }, 800);
+    try {
+      const result = await signIn('credentials', {
+        email,
+        password: pass,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        setError('Invalid credentials. Try the demo account.');
+        setLoading(false);
+        return;
+      }
+
+      if (result?.ok) {
+        dispatch({ type: 'SET_USER', user: { name: 'User', email } });
+        dispatch({ type: 'SET_AUTHENTICATED', isAuthenticated: true });
+        dispatch({ type: 'SET_SCREEN', screen: 'multiSite' });
+      }
+    } catch (err) {
+      setError('Login failed. Please try again.');
+      console.error('Login error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const demoLogin = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      const result = await signIn('credentials', {
+        email: process.env.NEXT_PUBLIC_TEST_ACCOUNT_EMAIL || 'test@cpsl.co.uk',
+        password: process.env.NEXT_PUBLIC_TEST_ACCOUNT_PASSWORD || 'demo123456',
+        redirect: false,
+      });
+
+      if (result?.ok) {
+        dispatch({ type: 'SET_USER', user: { name: 'Demo User', email: process.env.NEXT_PUBLIC_TEST_ACCOUNT_EMAIL || 'test@cpsl.co.uk' } });
+        dispatch({ type: 'SET_AUTHENTICATED', isAuthenticated: true });
+        dispatch({ type: 'SET_SCREEN', screen: 'multiSite' });
+      } else {
+        setError('Demo login failed');
+      }
+    } catch (err) {
+      setError('Demo login error');
+      console.error('Demo login error:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -67,15 +118,28 @@ export default function LoginScreen() {
           />
         </div>
 
+        {error && (
+          <div style={{ background: 'rgba(220,38,38,0.1)', border: '1px solid rgba(220,38,38,0.3)', borderRadius: 8, padding: '10px 12px', marginBottom: 16, fontSize: 12, color: '#dc2626' }}>
+            {error}
+          </div>
+        )}
+
         <button
           onClick={login}
           disabled={loading}
-          style={{ width: '100%', background: loading ? 'rgba(26,127,232,0.6)' : 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, padding: 12, fontWeight: 700, fontSize: 14, cursor: loading ? 'not-allowed' : 'pointer', transition: 'background 0.2s' }}>
+          style={{ width: '100%', background: loading ? 'rgba(26,127,232,0.6)' : 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, padding: 12, fontWeight: 700, fontSize: 14, cursor: loading ? 'not-allowed' : 'pointer', transition: 'background 0.2s', marginBottom: 10 }}>
           {loading ? 'Signing in...' : 'Sign In →'}
         </button>
 
+        <button
+          onClick={demoLogin}
+          disabled={loading}
+          style={{ width: '100%', background: 'rgba(26,127,232,0.2)', color: 'var(--accent)', border: '1px solid rgba(26,127,232,0.4)', borderRadius: 8, padding: 12, fontWeight: 700, fontSize: 14, cursor: loading ? 'not-allowed' : 'pointer', transition: 'background 0.2s' }}>
+          {loading ? 'Loading...' : '🎭 Demo Login'}
+        </button>
+
         <div style={{ textAlign: 'center', marginTop: 14, fontSize: 11, color: 'var(--muted)' }}>
-          Demo: any credentials work &nbsp;·&nbsp; Edge-first processing
+          Use demo account to explore &nbsp;·&nbsp; Edge-first processing
         </div>
       </div>
     </div>

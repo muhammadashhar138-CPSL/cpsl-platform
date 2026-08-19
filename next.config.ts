@@ -1,8 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: 'export',
-  trailingSlash: true,
+  // Note: Removed 'output: export' to enable server-side features (NextAuth, API routes)
+  // For static export, remove API routes and 'use server' code before exporting
   images: { unoptimized: true },
 };
 

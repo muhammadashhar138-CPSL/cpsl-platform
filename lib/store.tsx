@@ -1,7 +1,8 @@
 'use client';
 
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
-import { Site, Incident, Screen } from './types';
+import { Site, Incident, Screen, Domain, FeedItem } from './types';
+import { Settings } from './settingsTypes';
 
 export interface TeamMember {
   id: string;
@@ -21,6 +22,35 @@ export interface AlertRule {
   enabled: boolean;
 }
 
+export interface MonitoringSession {
+  isActive: boolean;
+  startTime: string | null;
+  elapsedSeconds: number;
+  activeSiteId: string | null;
+  pausedAt?: number;
+}
+
+export interface MonitoringData {
+  feeds: Record<Domain, FeedItem[]>;
+  counts: Record<Domain, number>;
+  totalEvents: number;
+  latency: number;
+  cpuUsage: number;
+  threatScore: number | null;
+  confidence: number;
+  chainLatency: number;
+  chainEvents: { domain: Domain; label: string; time: string; conf: number }[];
+  alertActive: boolean;
+  alertTitle: string;
+  narText: string;
+  narActive: boolean;
+  narReady: boolean;
+  incidentQueue: Incident[];
+  timeline: { icon: string; color: string; ev: string; time: string }[];
+  siteRisk: string;
+  activeScenario: Incident | null;
+}
+
 interface AppState {
   screen: Screen;
   sites: Site[];
@@ -31,6 +61,10 @@ interface AppState {
   detailIncident: Incident | null;
   team: TeamMember[];
   alertRules: AlertRule[];
+  settings: Settings | null;
+  isAuthenticated: boolean;
+  monitoring: MonitoringSession;
+  monitoringData: MonitoringData;
 }
 
 type Action =
@@ -46,7 +80,23 @@ type Action =
   | { type: 'ADD_TEAM_MEMBER'; member: TeamMember }
   | { type: 'REMOVE_TEAM_MEMBER'; id: string }
   | { type: 'TOGGLE_RULE'; id: string }
-  | { type: 'LOAD_STORAGE'; sites: Site[]; incidents: Incident[] };
+  | { type: 'LOAD_STORAGE'; sites: Site[]; incidents: Incident[] }
+  | { type: 'SET_SETTINGS'; settings: Settings }
+  | { type: 'UPDATE_SETTINGS'; settings: Partial<Settings> }
+  | { type: 'SET_AUTHENTICATED'; isAuthenticated: boolean }
+  | { type: 'START_MONITORING'; siteId: string }
+  | { type: 'STOP_MONITORING' }
+  | { type: 'PAUSE_MONITORING' }
+  | { type: 'RESUME_MONITORING' }
+  | { type: 'UPDATE_MONITORING_TIME'; elapsedSeconds: number }
+  | { type: 'LOAD_MONITORING_STATE'; monitoring: MonitoringSession }
+  | { type: 'UPDATE_MONITORING_DATA'; data: Partial<MonitoringData> }
+  | { type: 'ADD_FEED_ITEM'; domain: Domain; item: FeedItem }
+  | { type: 'UPDATE_MONITORING_METRICS'; latency: number; cpuUsage: number; totalEvents: number }
+  | { type: 'SET_ACTIVE_SCENARIO'; scenario: Incident | null }
+  | { type: 'LOAD_MONITORING_DATA'; data: MonitoringData }
+  | { type: 'CLEAR_MONITORING_DATA' }
+  | { type: 'LOGOUT' };
 
 const demoSites: Site[] = [
   {
@@ -135,9 +185,135 @@ function reducer(state: AppState, action: Action): AppState {
     case 'REMOVE_TEAM_MEMBER': return { ...state, team: state.team.filter(m => m.id !== action.id) };
     case 'TOGGLE_RULE': return { ...state, alertRules: state.alertRules.map(r => r.id === action.id ? { ...r, enabled: !r.enabled } : r) };
     case 'LOAD_STORAGE': return { ...state, sites: action.sites, allIncidents: action.incidents };
+    case 'SET_SETTINGS': return { ...state, settings: action.settings };
+    case 'UPDATE_SETTINGS': {
+      const settings = state.settings ? { ...state.settings, ...action.settings } : action.settings as Settings;
+      if (typeof window !== 'undefined') localStorage.setItem('cpsl_settings', JSON.stringify(settings));
+      return { ...state, settings };
+    }
+    case 'SET_AUTHENTICATED': return { ...state, isAuthenticated: action.isAuthenticated };
+    case 'START_MONITORING': {
+      const monitoring = {
+        isActive: true,
+        startTime: new Date().toISOString(),
+        elapsedSeconds: 0,
+        activeSiteId: action.siteId,
+      };
+      if (typeof window !== 'undefined') localStorage.setItem('cpsl_monitoring', JSON.stringify(monitoring));
+      return { ...state, monitoring };
+    }
+    case 'STOP_MONITORING': {
+      const monitoring = { ...state.monitoring, isActive: false, startTime: null, elapsedSeconds: 0, activeSiteId: null };
+      if (typeof window !== 'undefined') localStorage.removeItem('cpsl_monitoring');
+      return { ...state, monitoring };
+    }
+    case 'PAUSE_MONITORING': {
+      const monitoring = { ...state.monitoring, isActive: false, pausedAt: state.monitoring.elapsedSeconds };
+      if (typeof window !== 'undefined') localStorage.setItem('cpsl_monitoring', JSON.stringify(monitoring));
+      return { ...state, monitoring };
+    }
+    case 'RESUME_MONITORING': {
+      const monitoring = { ...state.monitoring, isActive: true, startTime: new Date().toISOString() };
+      if (typeof window !== 'undefined') localStorage.setItem('cpsl_monitoring', JSON.stringify(monitoring));
+      return { ...state, monitoring };
+    }
+    case 'UPDATE_MONITORING_TIME': {
+      const monitoring = { ...state.monitoring, elapsedSeconds: action.elapsedSeconds };
+      if (typeof window !== 'undefined') localStorage.setItem('cpsl_monitoring', JSON.stringify(monitoring));
+      return { ...state, monitoring };
+    }
+    case 'LOAD_MONITORING_STATE': {
+      return { ...state, monitoring: action.monitoring };
+    }
+    case 'UPDATE_MONITORING_DATA': {
+      const monitoringData = { ...state.monitoringData, ...action.data };
+      if (typeof window !== 'undefined') localStorage.setItem('cpsl_monitoring_data', JSON.stringify(monitoringData));
+      return { ...state, monitoringData };
+    }
+    case 'ADD_FEED_ITEM': {
+      const feeds = { ...state.monitoringData.feeds, [action.domain]: [action.item, ...state.monitoringData.feeds[action.domain]].slice(0, 12) };
+      const counts = { ...state.monitoringData.counts, [action.domain]: state.monitoringData.counts[action.domain] + 1 };
+      const monitoringData = { ...state.monitoringData, feeds, counts, totalEvents: state.monitoringData.totalEvents + 1 };
+      if (typeof window !== 'undefined') localStorage.setItem('cpsl_monitoring_data', JSON.stringify(monitoringData));
+      return { ...state, monitoringData };
+    }
+    case 'UPDATE_MONITORING_METRICS': {
+      const monitoringData = { ...state.monitoringData, latency: action.latency, cpuUsage: action.cpuUsage, totalEvents: action.totalEvents };
+      if (typeof window !== 'undefined') localStorage.setItem('cpsl_monitoring_data', JSON.stringify(monitoringData));
+      return { ...state, monitoringData };
+    }
+    case 'SET_ACTIVE_SCENARIO': {
+      const monitoringData = { ...state.monitoringData, activeScenario: action.scenario };
+      if (typeof window !== 'undefined') localStorage.setItem('cpsl_monitoring_data', JSON.stringify(monitoringData));
+      return { ...state, monitoringData };
+    }
+    case 'LOAD_MONITORING_DATA': {
+      return { ...state, monitoringData: action.data };
+    }
+    case 'CLEAR_MONITORING_DATA': {
+      if (typeof window !== 'undefined') localStorage.removeItem('cpsl_monitoring_data');
+      return { ...state, monitoringData: defaultMonitoringData };
+    }
+    case 'LOGOUT': {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('cpsl_sites');
+        localStorage.removeItem('cpsl_incidents');
+        localStorage.removeItem('cpsl_settings');
+        localStorage.removeItem('cpsl_monitoring');
+        localStorage.removeItem('cpsl_monitoring_data');
+      }
+      return { ...initialState, screen: 'login' };
+    }
     default: return state;
   }
 }
+
+const defaultSettings: Settings = {
+  siteName: 'CPSL Platform',
+  siteType: 'platform',
+  contactEmail: 'admin@cpsl.co.uk',
+  subscriptionLevel: 'enterprise',
+  notifications: {
+    emailAlerts: true,
+    smsAlerts: false,
+    incidentNotifications: true,
+  },
+  dataRetention: 90,
+  twoFactorEnabled: false,
+  integrations: {
+    slack: { configured: false },
+    teams: { configured: false },
+    webhooks: { configured: false },
+  },
+};
+
+const defaultMonitoring: MonitoringSession = {
+  isActive: false,
+  startTime: null,
+  elapsedSeconds: 0,
+  activeSiteId: null,
+};
+
+const defaultMonitoringData: MonitoringData = {
+  feeds: { cctv: [], access: [], machine: [], network: [] },
+  counts: { cctv: 0, access: 0, machine: 0, network: 0 },
+  totalEvents: 0,
+  latency: 0,
+  cpuUsage: 0,
+  threatScore: null,
+  confidence: 0,
+  chainLatency: 0,
+  chainEvents: [],
+  alertActive: false,
+  alertTitle: '',
+  narText: '',
+  narActive: false,
+  narReady: false,
+  incidentQueue: [],
+  timeline: [],
+  siteRisk: 'Low',
+  activeScenario: null,
+};
 
 const initialState: AppState = {
   screen: 'login',
@@ -149,6 +325,10 @@ const initialState: AppState = {
   detailIncident: null,
   team: defaultTeam,
   alertRules: defaultRules,
+  settings: defaultSettings,
+  isAuthenticated: false,
+  monitoring: defaultMonitoring,
+  monitoringData: defaultMonitoringData,
 };
 
 const StoreContext = createContext<{ state: AppState; dispatch: React.Dispatch<Action> } | null>(null);
@@ -159,10 +339,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const storedSites = localStorage.getItem('cpsl_sites');
     const storedIncidents = localStorage.getItem('cpsl_incidents');
+    const storedMonitoring = localStorage.getItem('cpsl_monitoring');
+    const storedMonitoringData = localStorage.getItem('cpsl_monitoring_data');
     const sites = storedSites ? JSON.parse(storedSites) : demoSites;
     const incidents = storedIncidents ? JSON.parse(storedIncidents) : [];
+    const monitoring = storedMonitoring ? JSON.parse(storedMonitoring) : defaultMonitoring;
+    const monitoringData = storedMonitoringData ? JSON.parse(storedMonitoringData) : defaultMonitoringData;
     if (!storedSites) localStorage.setItem('cpsl_sites', JSON.stringify(demoSites));
     dispatch({ type: 'LOAD_STORAGE', sites, incidents });
+    dispatch({ type: 'LOAD_MONITORING_STATE', monitoring });
+    dispatch({ type: 'LOAD_MONITORING_DATA', data: monitoringData });
+    // Auto-select first site for demo convenience
+    if (sites.length > 0) {
+      dispatch({ type: 'SET_ACTIVE_SITE', site: sites[0] });
+    }
   }, []);
 
   return <StoreContext.Provider value={{ state, dispatch }}>{children}</StoreContext.Provider>;

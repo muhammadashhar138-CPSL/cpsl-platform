@@ -1,13 +1,16 @@
 'use client';
 
+import { useState } from 'react';
 import { useStore } from '@/lib/store';
 import { generateReport } from '@/lib/report';
+import AlertManagerModal from './AlertManagerModal';
 
 const domColors: Record<string, string> = { cctv: '#1a7fe8', access: '#22c55e', machine: '#f59e0b', network: '#ef4444' };
 
 export default function IncidentModal() {
   const { state, dispatch } = useStore();
   const s = state.modalIncident;
+  const [alertOpen, setAlertOpen] = useState(false);
   if (!s) return null;
 
   const close = () => dispatch({ type: 'SET_MODAL_INCIDENT', incident: null });
@@ -75,10 +78,12 @@ export default function IncidentModal() {
 
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => generateReport(s)} style={{ flex: 1, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>📥 Download PDF Report</button>
-          <button onClick={openDetail} style={{ flex: 1, background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 8, padding: '10px 16px', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>📄 Full Detail Page</button>
-          <button onClick={close} style={{ flex: 1, background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 8, padding: '10px 16px', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>✕ Close</button>
+          <button onClick={() => setAlertOpen(true)} style={{ flex: 1, background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)', color: 'var(--warn)', borderRadius: 8, padding: '10px 16px', fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>📧 Alert Manager</button>
+          <button onClick={openDetail} style={{ flex: 1, background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 8, padding: '10px 16px', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>📄 Full Detail</button>
+          <button onClick={close} style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 8, padding: '10px 14px', fontSize: 12, cursor: 'pointer' }}>✕</button>
         </div>
       </div>
+      {alertOpen && <AlertManagerModal incident={s} onClose={() => setAlertOpen(false)} />}
     </div>
   );
 }

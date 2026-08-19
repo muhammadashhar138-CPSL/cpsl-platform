@@ -46,3 +46,102 @@ html, body {
 .anim-fade { animation: fadeInDown 0.4s ease; }
 .anim-pulse-red { animation: pulseRed 2s infinite; }
 .anim-slide-up { animation: slideUp 0.3s ease; }
+
+/* ── Camera grid keyframes ── */
+@keyframes camZoom {
+  0%   { transform: scale(1)    translate(0%,  0%);  }
+  25%  { transform: scale(1.18) translate(-3%, -2%); }
+  50%  { transform: scale(1.22) translate(2%,  3%);  }
+  75%  { transform: scale(1.12) translate(-1%, 2%);  }
+  100% { transform: scale(1)    translate(0%,  0%);  }
+}
+@keyframes camPan {
+  0%   { transform: scale(1.1) translate(0%,  0%);  }
+  33%  { transform: scale(1.1) translate(-4%, -3%); }
+  66%  { transform: scale(1.1) translate(4%,  2%);  }
+  100% { transform: scale(1.1) translate(0%,  0%);  }
+}
+@keyframes scanline {
+  0%   { top: -10%; }
+  100% { top: 110%; }
+}
+@keyframes alertFlash {
+  0%,100% { opacity: 0; }
+  50%     { opacity: 1; }
+}
+@keyframes boxPulse {
+  0%,100% { opacity: 1;   box-shadow: 0 0 0 0   rgba(239,68,68,0.6); }
+  50%     { opacity: 0.7; box-shadow: 0 0 0 5px rgba(239,68,68,0);   }
+}
+@keyframes motionPulse {
+  0%,100% { opacity: 1;   box-shadow: 0 0 0 0   rgba(245,158,11,0.6); }
+  50%     { opacity: 0.65; box-shadow: 0 0 0 5px rgba(245,158,11,0);  }
+}
+@keyframes noiseShift {
+  0%   { background-position: 0%   0%;   }
+  50%  { background-position: 100% 100%; }
+  100% { background-position: 0%   0%;   }
+}
+@keyframes personWalk {
+  0%   { transform: translateX(0px);   }
+  25%  { transform: translateX(8px);   }
+  50%  { transform: translateX(14px);  }
+  75%  { transform: translateX(8px);   }
+  100% { transform: translateX(0px);   }
+}
+@keyframes personBob {
+  0%,100% { transform: translateY(0px);  }
+  50%     { transform: translateY(-2px); }
+}
+@keyframes scanFast {
+  0%   { top: -12%; opacity: 0.6; }
+  80%  { opacity: 0.6; }
+  100% { top: 115%;  opacity: 0;  }
+}
+@keyframes irFlicker {
+  0%,100% { opacity: 1;   }
+  92%     { opacity: 1;   }
+  93%     { opacity: 0.7; }
+  94%     { opacity: 1;   }
+  97%     { opacity: 0.85;}
+  98%     { opacity: 1;   }
+}
+@keyframes zoomAlert {
+  0%,100% { transform: scale(1.18) translate(-1%, -1%); }
+  50%     { transform: scale(1.28) translate(1%,  1%);  }
+}
+@keyframes zoomClear {
+  0%   { transform: scale(1)    translate(0%,  0%);  }
+  30%  { transform: scale(1.14) translate(-2%, -1%); }
+  60%  { transform: scale(1.18) translate(1%,  2%);  }
+  100% { transform: scale(1)    translate(0%,  0%);  }
+}
+@keyframes zoomMotion {
+  0%   { transform: scale(1.08) translate(0%, 0%);   }
+  40%  { transform: scale(1.08) translate(-3%, -2%); }
+  80%  { transform: scale(1.08) translate(3%,  1%);  }
+  100% { transform: scale(1.08) translate(0%,  0%);  }
+}
+@keyframes detectionAppear {
+  0%   { opacity: 0; transform: scale(0.85); }
+  100% { opacity: 1; transform: scale(1);    }
+}
+@keyframes cornerPulse {
+  0%,100% { opacity: 1;    }
+  50%     { opacity: 0.45; }
+}
+@keyframes signalWave {
+  0%   { transform: scaleX(1);   opacity: 0.5; }
+  50%  { transform: scaleX(0.6); opacity: 1;   }
+  100% { transform: scaleX(1);   opacity: 0.5; }
+}
+@keyframes glitch {
+  0%,90%,100% { clip-path: none; transform: none; }
+  91% { clip-path: inset(30% 0 40% 0); transform: translateX(4px);  }
+  93% { clip-path: inset(60% 0 10% 0); transform: translateX(-3px); }
+  95% { clip-path: none; transform: none; }
+}
+@keyframes overlayPulse {
+  0%,100% { opacity: 0.04; }
+  50%     { opacity: 0.12; }
+}

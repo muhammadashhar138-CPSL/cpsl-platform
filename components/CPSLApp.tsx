@@ -1,6 +1,7 @@
 'use client';
 
 import { StoreProvider, useStore } from '@/lib/store';
+import ErrorBoundary from './ErrorBoundary';
 import LoginScreen from './screens/LoginScreen';
 import MultiSiteScreen from './screens/MultiSiteScreen';
 import AddSiteScreen from './screens/AddSiteScreen';
@@ -46,8 +47,10 @@ function AppRouter() {
 
 export default function CPSLApp() {
   return (
-    <StoreProvider>
-      <AppRouter />
-    </StoreProvider>
+    <ErrorBoundary>
+      <StoreProvider>
+        <AppRouter />
+      </StoreProvider>
+    </ErrorBoundary>
   );
 }

@@ -1,36 +1,90 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🛡️ CPSL — Cyber-Physical Security Layer
 
-## Getting Started
+[![Netlify Status](https://api.netlify.com/api/v1/badges/a3f695eb-3cb2-4817-b62c-a633bdb3d84b/deploy-status)](https://app.netlify.com/projects/cyberphysicalsecuritylayer/deploys)
 
-First, run the development server:
+**Next.js prototype for cyber-physical incident intelligence platform targeting UK SMEs.**
+
+Incident Reconstruction Engine (IRE) with cross-domain threat correlation, real-time monitoring, and automated security response recommendations.
+
+## 🚀 Features
+
+- ✅ **Real-time monitoring** across 4 domains (CCTV, Access Control, Machine, Network)
+- ✅ **Incident Reconstruction Engine (IRE)** — AI-powered threat correlation
+- ✅ **Suspicion chains** — Multi-domain anomaly detection
+- ✅ **Plain-English narratives** — IRE analysis in readable format
+- ✅ **Recommended responses** — Actionable security recommendations
+- ✅ **Authentication** — NextAuth.js with demo account
+- ✅ **Settings management** — 6-tab configuration system
+- ✅ **Persistent state** — localStorage + React Context
+- ✅ **Multi-site support** — Monitor multiple facilities
+
+## 🔗 Links
+
+- 🌐 **Live App:** https://cyberphysicalsecuritylayer.netlify.app
+- 💻 **GitHub:** https://github.com/muhammadashhar138-CPSL/cpsl-platform
+- 📊 **Netlify Dashboard:** https://app.netlify.com/projects/cyberphysicalsecuritylayer
+
+## 🏃 Quick Start
 
 ```bash
+# Install dependencies
+npm install
+
+# Start dev server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+
+# Open browser
+# http://localhost:3000
+
+# Demo login
+# Email: test@cpsl.co.uk
+# Password: demo123456
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 📋 Test Flow
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Click **"🎭 Demo Login"**
+2. Click **"Start Monitoring"**
+3. Wait **10 seconds** → First incident appears
+4. Wait **30 seconds** → Second incident appears
+5. Wait **50 seconds** → Third incident appears
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Each incident shows:
+- Threat score & confidence
+- Suspicion chain with domain events
+- IRE narrative analysis
+- Recommended response actions
 
-## Learn More
+## 🏗️ Architecture
 
-To learn more about Next.js, take a look at the following resources:
+- **Frontend:** Next.js 16, React 19, TypeScript
+- **State Management:** React Context + Redux pattern
+- **Auth:** NextAuth.js with credentials provider
+- **Styling:** CSS-in-JS (inline styles)
+- **Deployment:** Netlify (auto-deploy on GitHub push)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 📦 Build
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm run build
+npm run start
+```
 
-## Deploy on Vercel
+## 📝 Novel Features
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- **Novel Point A:** Cyber-Physical Domain Correlation
+- **Novel Point B:** Suspicion Chain Detection
+- **Novel Point C:** Incident Reconstruction Engine (IRE)
+- **Novel Point D:** Plain-English Narrative Generation
+- **Novel Point E:** Automated Response Recommendations
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 🔐 Test Account
+
+```
+Email: test@cpsl.co.uk
+Password: demo123456
+```
+
+## 📄 License
+
+© 2026 muhammadashhar138-CPSL. All rights reserved.

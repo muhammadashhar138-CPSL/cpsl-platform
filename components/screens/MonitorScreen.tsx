@@ -2,7 +2,11 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useStore, buildScenarios } from '@/lib/store';
+import { useMonitoring } from '@/lib/useMonitoring';
 import AppLayout from '../AppLayout';
+import CameraGrid from '../CameraGrid';
+import AlertManagerModal from '../AlertManagerModal';
+import IncidentDetailModal from '../IncidentDetailModal';
 import { Domain, FeedItem, Incident } from '@/lib/types';
 import { generateReport } from '@/lib/report';
 
@@ -46,9 +50,17 @@ function getTime() { return new Date().toTimeString().slice(0, 8); }
 
 export default function DashboardScreen() {
   const { state, dispatch } = useStore();
+  const { monitoring, startMonitoring: globalStartMonitoring, stopMonitoring: globalStopMonitoring } = useMonitoring();
   const site = state.activeSite;
 
-  const [monitoring, setMonitoring] = useState(true);
+  // Format elapsed time
+  const formatTime = (seconds: number) => {
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const [feeds, setFeeds] = useState<Record<Domain, FeedItem[]>>({ cctv: [], access: [], machine: [], network: [] });
   const [counts, setCounts] = useState<Record<Domain, number>>({ cctv: 0, access: 0, machine: 0, network: 0 });
   const [totalEvents, setTotalEvents] = useState(0);
@@ -68,6 +80,16 @@ export default function DashboardScreen() {
   const [siteRisk, setSiteRisk] = useState<string>('Low');
   const [activeScenario, setActiveScenario] = useState<Incident | null>(null);
   const [uptime] = useState(() => `${Math.floor(Math.random() * 8 + 1)}h ${Math.floor(Math.random() * 59)}m`);
+  const [alertManagerOpen, setAlertManagerOpen] = useState(false);
+  const [alertManagerIncident, setAlertManagerIncident] = useState<Incident | null>(null);
+  const [incidentDetailOpen, setIncidentDetailOpen] = useState(false);
+  const [detailIncident, setDetailIncident] = useState<Incident | null>(null);
+  const [activityBars] = useState(() => Array.from({ length: 24 }, (_, i) => ({ hour: i, normal: Math.floor(Math.random() * 60 + 20), anomaly: Math.random() < 0.2 ? Math.floor(Math.random() * 40 + 10) : 0 })));
+
+  const openAlertManager = useCallback((inc?: Incident) => {
+    setAlertManagerIncident(inc || activeScenario);
+    setAlertManagerOpen(true);
+  }, [activeScenario]);
 
   const monTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const chainTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -82,25 +104,81 @@ export default function DashboardScreen() {
   }, []);
 
   const fireChain = useCallback((idx: number) => {
-    if (!site) return;
-    const sc = buildScenarios(site)[idx];
+    try {
+      console.log('fireChain called with idx:', idx, 'site:', site);
+      if (!site) {
+        console.error('No site selected, fireChain returning early');
+        return;
+      }
+      const scenarios = buildScenarios(site);
+      console.log('Scenarios built:', scenarios.length);
+      const sc = scenarios[idx];
+      if (!sc) {
+        console.error('No scenario found at index:', idx);
+        return;
+      }
+      console.log('Incident scenario:', sc);
+      const riskLevel = sc.severity === 'critical' ? 'Critical' : sc.severity === 'high' ? 'High' : 'Medium';
+
     setActiveScenario(sc);
     setAlertActive(true);
     setAlertTitle(`Chain ID: ${sc.id} — ${sc.title}`);
-    setSiteRisk(sc.severity === 'critical' ? 'Critical' : sc.severity === 'high' ? 'High' : 'Medium');
-    setIncidentQueue(prev => [sc, ...prev.filter(i => i.id !== sc.id)]);
+    setSiteRisk(riskLevel);
+    setIncidentQueue(prev => {
+      const updated = [sc, ...prev.filter(i => i.id !== sc.id)];
+      return updated;
+    });
+
+    // Add to global incidents queue
     dispatch({ type: 'ADD_INCIDENT', incident: sc });
+
+    // Immediately sync to monitoring data
+    dispatch({
+      type: 'UPDATE_MONITORING_DATA',
+      data: {
+        activeScenario: sc,
+        alertActive: true,
+        alertTitle: `Chain ID: ${sc.id} — ${sc.title}`,
+        siteRisk: riskLevel,
+      },
+    });
+
+    // Open the incident detail modal first to show full incident info
+    setTimeout(() => {
+      console.log('Opening incident detail modal with scenario:', sc);
+      setDetailIncident(sc);
+      setIncidentDetailOpen(true);
+    }, 500);
 
     let step = 0;
     const evs = sc.chain;
 
     const runStep = () => {
       if (step >= evs.length) {
-        setThreatScore(parseInt(sc.threatScore));
-        setConfidence(sc.confidence);
+        const threatScore = parseInt(sc.threatScore);
+        const confidence = sc.confidence;
+        setThreatScore(threatScore);
+        setConfidence(confidence);
         setNarText(sc.narrative);
         setNarActive(true);
         setNarReady(true);
+
+        // Persist to global state
+        setTimeout(() => {
+          dispatch({
+            type: 'UPDATE_MONITORING_DATA',
+            data: {
+              threatScore,
+              confidence,
+              narText: sc.narrative,
+              narActive: true,
+              narReady: true,
+              activeScenario: sc,
+              alertActive: true,
+              siteRisk: sc.severity === 'critical' ? 'Critical' : sc.severity === 'high' ? 'High' : 'Medium',
+            },
+          });
+        }, 100);
         return;
       }
       const e = evs[step];
@@ -117,53 +195,158 @@ export default function DashboardScreen() {
 
     // First anomaly appears after 3 seconds
     chainTimers.current.push(setTimeout(runStep, 3000));
+    } catch (error) {
+      console.error('Error in fireChain:', error);
+    }
   }, [site, dispatch, addFeedItem]);
 
-  const startMonitoring = useCallback(() => {
-    setMonitoring(true);
-    if (site) dispatch({ type: 'UPDATE_SITE', site: { ...site, monitoring: true } });
+  const handleStartMonitoring = useCallback(() => {
+    console.log('handleStartMonitoring called, site:', site);
+    if (site) {
+      globalStartMonitoring(site.id);
+      dispatch({ type: 'UPDATE_SITE', site: { ...site, monitoring: true } });
 
-    // Realistic: one event every 2.5-4 seconds
-    monTimer.current = setInterval(() => {
-      const domains: Domain[] = ['cctv', 'access', 'machine', 'network'];
-      const d = domains[Math.floor(Math.random() * 4)];
-      addFeedItem(d, getNorm(site?.type || 'warehouse', d), false);
-      setLatency(Math.floor(Math.random() * 60 + 180));
-      setCpuUsage(Math.floor(Math.random() * 15 + 18));
-    }, 2500 + Math.random() * 1500);
+      // Realistic: one event every 2.5-4 seconds
+      monTimer.current = setInterval(() => {
+        const domains: Domain[] = ['cctv', 'access', 'machine', 'network'];
+        const d = domains[Math.floor(Math.random() * 4)];
+        addFeedItem(d, getNorm(site.type || 'warehouse', d), false);
+        setLatency(Math.floor(Math.random() * 60 + 180));
+        setCpuUsage(Math.floor(Math.random() * 15 + 18));
+      }, 2500 + Math.random() * 1500);
 
-    // Realistic timing: chains fire after 25s, 90s, 180s
-    chainFired.current = [false, false, false];
-    chainTimers.current.push(setTimeout(() => { if (!chainFired.current[0]) { chainFired.current[0] = true; fireChain(0); } }, 25000));
-    chainTimers.current.push(setTimeout(() => { if (!chainFired.current[1]) { chainFired.current[1] = true; fireChain(1); } }, 90000));
-    chainTimers.current.push(setTimeout(() => { if (!chainFired.current[2]) { chainFired.current[2] = true; fireChain(2); } }, 180000));
-  }, [site, dispatch, addFeedItem, fireChain]);
+      // TEST: Show first incident immediately to verify modal works
+      setTimeout(() => {
+        console.log('TEST: Showing first incident immediately');
+        fireChain(0);
+      }, 1000);
 
-  const stopMonitoring = useCallback(() => {
-    setMonitoring(false);
+      // Demo timing: chains fire after 10s, 30s, 50s (faster for demo)
+      chainFired.current = [false, false, false];
+      console.log('Setting up chain timers at 10s, 30s, 50s');
+      chainTimers.current.push(setTimeout(() => { console.log('Chain 0 timer fired!'); if (!chainFired.current[0]) { chainFired.current[0] = true; fireChain(0); } }, 10000));
+      chainTimers.current.push(setTimeout(() => { console.log('Chain 1 timer fired!'); if (!chainFired.current[1]) { chainFired.current[1] = true; fireChain(1); } }, 30000));
+      chainTimers.current.push(setTimeout(() => { console.log('Chain 2 timer fired!'); if (!chainFired.current[2]) { chainFired.current[2] = true; fireChain(2); } }, 50000));
+    } else {
+      console.log('handleStartMonitoring: NO SITE AVAILABLE');
+    }
+  }, [site, dispatch, globalStartMonitoring, addFeedItem, fireChain]);
+
+  const handleStopMonitoring = useCallback(() => {
+    globalStopMonitoring();
     if (site) dispatch({ type: 'UPDATE_SITE', site: { ...site, monitoring: false } });
     if (monTimer.current) clearInterval(monTimer.current);
     chainTimers.current.forEach(clearTimeout);
     chainTimers.current = [];
-  }, [site, dispatch]);
+  }, [site, dispatch, globalStopMonitoring]);
 
   const toggleMonitoring = () => {
-    if (monitoring) {
-      stopMonitoring();
+    if (monitoring.isActive) {
+      handleStopMonitoring();
     } else {
       setChainEvents([]); setThreatScore(null); setConfidence(0);
       setAlertActive(false); setNarReady(false); setNarActive(false); setNarText('');
-      startMonitoring();
+      handleStartMonitoring();
     }
   };
 
+  // Load monitoring data from global state when component mounts
   useEffect(() => {
-    startMonitoring();
+    const globalData = state.monitoringData;
+    if (globalData && globalData.feeds && Object.keys(globalData.feeds).length > 0) {
+      setFeeds(globalData.feeds);
+      setCounts(globalData.counts);
+      setTotalEvents(globalData.totalEvents);
+      setLatency(globalData.latency);
+      setCpuUsage(globalData.cpuUsage);
+      setThreatScore(globalData.threatScore);
+      setConfidence(globalData.confidence);
+      setChainLatency(globalData.chainLatency);
+      setChainEvents(globalData.chainEvents);
+      setAlertActive(globalData.alertActive);
+      setAlertTitle(globalData.alertTitle);
+      setNarText(globalData.narText);
+      setNarActive(globalData.narActive);
+      setNarReady(globalData.narReady);
+      setIncidentQueue(globalData.incidentQueue);
+      setTimeline(globalData.timeline);
+      setSiteRisk(globalData.siteRisk);
+      setActiveScenario(globalData.activeScenario);
+    }
+  }, [state.monitoringData]);
+
+  // Sync all state changes to global state periodically
+  useEffect(() => {
+    if (monitoring.isActive) {
+      const syncInterval = setInterval(() => {
+        dispatch({
+          type: 'UPDATE_MONITORING_DATA',
+          data: {
+            feeds,
+            counts,
+            totalEvents,
+            latency,
+            cpuUsage,
+            threatScore,
+            confidence,
+            chainLatency,
+            chainEvents,
+            alertActive,
+            alertTitle,
+            narText,
+            narActive,
+            narReady,
+            incidentQueue,
+            timeline,
+            siteRisk,
+            activeScenario,
+          },
+        });
+      }, 1000); // Sync every second
+
+      return () => clearInterval(syncInterval);
+    }
+  }, [
+    monitoring.isActive,
+    dispatch,
+    feeds,
+    counts,
+    totalEvents,
+    latency,
+    cpuUsage,
+    threatScore,
+    confidence,
+    chainLatency,
+    chainEvents,
+    alertActive,
+    alertTitle,
+    narText,
+    narActive,
+    narReady,
+    incidentQueue,
+    timeline,
+    siteRisk,
+    activeScenario,
+  ]);
+
+  useEffect(() => {
+    if (!site) return;
+    // If monitoring was active from global state, continue it
+    if (monitoring.isActive && monitoring.activeSiteId === site.id) {
+      monTimer.current = setInterval(() => {
+        const domains: Domain[] = ['cctv', 'access', 'machine', 'network'];
+        const d = domains[Math.floor(Math.random() * 4)];
+        addFeedItem(d, getNorm(site.type || 'warehouse', d), false);
+        setLatency(Math.floor(Math.random() * 60 + 180));
+        setCpuUsage(Math.floor(Math.random() * 15 + 18));
+      }, 2500 + Math.random() * 1500);
+    }
+
     return () => {
       if (monTimer.current) clearInterval(monTimer.current);
-      chainTimers.current.forEach(clearTimeout);
+      // Don't clear chainTimers here - they're managed by handleStopMonitoring
     };
-  }, []); // eslint-disable-line
+  }, [site?.id, monitoring.isActive, monitoring.activeSiteId, addFeedItem]); // eslint-disable-line
 
   const openModal = (inc: Incident) => dispatch({ type: 'SET_MODAL_INCIDENT', incident: inc });
   const openDetail = (inc: Incident) => {
@@ -174,7 +357,40 @@ export default function DashboardScreen() {
   const riskColor = siteRisk === 'Critical' ? 'var(--danger)' : siteRisk === 'High' ? 'var(--warn)' : siteRisk === 'Medium' ? 'var(--accent)' : 'var(--ok)';
   const typeIcons: Record<string, string> = { warehouse: '🏭', workshop: '🔧', logistics: '🚚', supply: '📦' };
 
+  // PHYSICAL domains: cctv, access, machine — CYBER domains: network
+  const domainType = (d: Domain) => d === 'network' ? 'CYBER' : 'PHYSICAL';
+  const domainTypeColor = (d: Domain) => d === 'network' ? '#8b5cf6' : '#06b6d4';
+
+  if (!site) {
+    return (
+      <AppLayout active="dashboard">
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: 16, textAlign: 'center', padding: 24 }}>
+          <div style={{ fontSize: 48 }}>🏭</div>
+          <div style={{ fontSize: 20, fontWeight: 800 }}>Select a site first to see monitoring</div>
+          <div style={{ fontSize: 13, color: 'var(--muted)', maxWidth: 420 }}>No site is currently selected. Choose a site to begin real-time cross-domain monitoring and threat analysis.</div>
+          <button onClick={() => dispatch({ type: 'SET_SCREEN', screen: 'multiSite' })}
+            style={{ background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 24px', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+            ⊞ Go to Multi-Site — Select a Site
+          </button>
+        </div>
+      </AppLayout>
+    );
+  }
+
   return (
+    <>
+    {incidentDetailOpen && (
+      <IncidentDetailModal
+        incident={detailIncident}
+        onClose={() => setIncidentDetailOpen(false)}
+        onAlert={() => {
+          setIncidentDetailOpen(false);
+          setAlertManagerIncident(detailIncident);
+          setAlertManagerOpen(true);
+        }}
+      />
+    )}
+    {alertManagerOpen && <AlertManagerModal incident={alertManagerIncident} onClose={() => setAlertManagerOpen(false)} />}
     <AppLayout active="dashboard">
       <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
 
@@ -184,9 +400,9 @@ export default function DashboardScreen() {
             <div style={{ fontSize: 14, fontWeight: 700 }}>
               {typeIcons[site?.type || 'warehouse']} {site?.name || 'No site selected'}
             </div>
-            {monitoring ? (
+            {monitoring.isActive ? (
               <div style={{ background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.4)', color: 'var(--ok)', padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
-                <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--ok)', animation: 'blink 1.5s infinite' }} /> LIVE
+                <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--ok)', animation: 'blink 1.5s infinite' }} /> LIVE · {formatTime(monitoring.elapsedSeconds)}
               </div>
             ) : (
               <div style={{ background: 'rgba(100,116,139,0.12)', border: '1px solid var(--border)', color: 'var(--muted)', padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600 }}>⏸ PAUSED</div>
@@ -203,8 +419,8 @@ export default function DashboardScreen() {
               </div>
             ))}
             <button onClick={toggleMonitoring}
-              style={{ background: monitoring ? 'var(--danger)' : 'var(--ok)', color: monitoring ? '#fff' : '#000', border: 'none', borderRadius: 8, padding: '7px 18px', fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-              {monitoring ? '⏸ Stop Monitoring' : '▶ Start Monitoring'}
+              style={{ background: monitoring.isActive ? 'var(--danger)' : 'var(--ok)', color: monitoring.isActive ? '#fff' : '#000', border: 'none', borderRadius: 8, padding: '7px 18px', fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+              {monitoring.isActive ? '⏸ Stop Monitoring' : '▶ Start Monitoring'}
             </button>
           </div>
         </div>
@@ -213,7 +429,7 @@ export default function DashboardScreen() {
         <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 280px', overflow: 'hidden' }}>
           <main style={{ overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-            {!monitoring ? (
+            {!monitoring.isActive ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 400, gap: 16, textAlign: 'center' }}>
                 <div style={{ fontSize: 48 }}>⏸</div>
                 <div style={{ fontSize: 18, fontWeight: 700 }}>Monitoring Paused</div>
@@ -222,9 +438,26 @@ export default function DashboardScreen() {
               </div>
             ) : <>
 
+              {/* Stats row — from Figma */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
+                {[
+                  { label: 'SITE RISK SCORE', value: threatScore ?? '—', sub: alertActive ? '↑ Active Investigation' : 'Nominal', color: threatScore && threatScore > 75 ? 'var(--danger)' : threatScore && threatScore > 50 ? 'var(--warn)' : 'var(--ok)' },
+                  { label: 'ACTIVE INCIDENTS', value: incidentQueue.length, sub: incidentQueue.filter(i => i.severity === 'critical').length + ' critical · ' + incidentQueue.filter(i => i.severity === 'high').length + ' high', color: incidentQueue.length > 0 ? 'var(--danger)' : 'var(--ok)' },
+                  { label: 'SUSPICION CHAINS', value: chainEvents.length > 0 ? Math.ceil(chainEvents.length / 2) : 0, sub: 'Cross-domain sequences', color: 'var(--chain)' },
+                  { label: 'CORRELATION RATE', value: confidence > 0 ? confidence + '%' : '94%', sub: 'Above detection threshold', color: 'var(--ok)' },
+                  { label: 'FALSE POSITIVES', value: '↓ 95%', sub: 'vs generic IT tools', color: 'var(--ok)' },
+                ].map(s => (
+                  <div key={s.label} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px' }}>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--muted)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>{s.label}</div>
+                    <div style={{ fontSize: 28, fontWeight: 900, color: s.color, lineHeight: 1, marginBottom: 4 }}>{s.value}</div>
+                    <div style={{ fontSize: 10, color: 'var(--muted)' }}>{s.sub}</div>
+                  </div>
+                ))}
+              </div>
+
               {/* Alert banner */}
               {alertActive && (
-                <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.45)', borderRadius: 10, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, animation: 'anim-pulse-red 2s infinite' }}>
+                <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.45)', borderRadius: 10, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, animation: 'pulseRed 2s infinite' }}>
                   <div style={{ fontSize: 20 }}>🚨</div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 700, color: 'var(--danger)', fontSize: 13 }}>CRITICAL — Active Suspicion Chain Detected</div>
@@ -234,10 +467,14 @@ export default function DashboardScreen() {
                     {incidentQueue[0] && <>
                       <button onClick={() => openModal(incidentQueue[0])} style={alertBtn('var(--danger)', '#fff')}>Investigate →</button>
                       <button onClick={() => generateReport(incidentQueue[0])} style={alertBtn('transparent', 'var(--danger)', 'var(--danger)')}>📥 Report</button>
+                      <button onClick={() => openAlertManager(incidentQueue[0])} style={alertBtn('transparent', 'var(--warn)', 'var(--warn)')}>📧 Alert Manager</button>
                     </>}
                   </div>
                 </div>
               )}
+
+              {/* CCTV Camera Grid */}
+              <CameraGrid alertActive={alertActive} monitoring={monitoring.isActive} />
 
               {/* IRE Suspicion Chain */}
               <Section title="⛓ Suspicion Chain" badge="IRE ENGINE ACTIVE">
@@ -272,8 +509,11 @@ export default function DashboardScreen() {
                         {i > 0 && <div style={{ color: 'var(--chain)', fontSize: 16, padding: '0 4px' }}>→</div>}
                         <div style={{ background: 'rgba(139,92,246,0.08)', border: `1px solid rgba(139,92,246,0.3)`, borderTop: `2px solid ${domColors[e.domain]}`, borderRadius: 8, padding: '8px 12px', minWidth: 130 }}>
                           <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 2 }}>{e.domain}</div>
-                          <div style={{ fontSize: 11, fontWeight: 600, lineHeight: 1.3 }}>{e.label}</div>
-                          <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>{e.time}</div>
+                          <div style={{ fontSize: 11, fontWeight: 600, lineHeight: 1.3, marginBottom: 3 }}>{e.label}</div>
+                          <span style={{ fontSize: 8, fontWeight: 800, padding: '1px 5px', borderRadius: 3, background: domainType(e.domain) === 'CYBER' ? 'rgba(139,92,246,0.2)' : 'rgba(6,182,212,0.15)', color: domainTypeColor(e.domain), letterSpacing: 0.5 }}>
+                            {domainType(e.domain)}
+                          </span>
+                          <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 3 }}>{e.time}</div>
                           <div style={{ fontSize: 10, color: 'var(--chain)', fontWeight: 700, marginTop: 2 }}>Conf: {e.conf}%</div>
                         </div>
                       </div>
@@ -339,12 +579,43 @@ export default function DashboardScreen() {
                       <NarBtn primary onClick={() => openModal(activeScenario)}>🔍 Full Reconstruction</NarBtn>
                       <NarBtn onClick={() => generateReport(activeScenario)}>📥 Download Report</NarBtn>
                       <NarBtn onClick={() => openDetail(activeScenario)}>📄 View Full Detail</NarBtn>
-                      <NarBtn>📧 Alert Security Team</NarBtn>
+                      <NarBtn onClick={() => openAlertManager(activeScenario)}>📧 Alert Security Team</NarBtn>
                       <NarBtn>📋 Log to Queue</NarBtn>
                     </div>
                   )}
                 </div>
               </Section>
+
+              {/* 24-hr Activity Chart */}
+              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 16 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 4 }}>24-HR Event Activity vs Site Baseline</div>
+                {alertActive && <div style={{ fontSize: 11, color: 'var(--danger)', marginBottom: 10 }}>● Anomaly threshold crossed at {chainEvents[0]?.time || '—'} — correlated across {chainEvents.length} domain{chainEvents.length !== 1 ? 's' : ''}</div>}
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 60 }}>
+                  {activityBars.map((bar, i) => {
+                    const maxH = 60;
+                    const normalH = Math.max(4, (bar.normal / 100) * maxH);
+                    const anomH = bar.anomaly ? Math.max(4, (bar.anomaly / 60) * maxH) : 0;
+                    const isNow = i === new Date().getHours();
+                    return (
+                      <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                        {anomH > 0 && <div style={{ width: '100%', height: anomH, background: 'rgba(239,68,68,0.7)', borderRadius: '2px 2px 0 0', minHeight: 4 }} title={`Anomaly: ${bar.anomaly}`} />}
+                        <div style={{ width: '100%', height: normalH - (anomH || 0), background: isNow ? 'rgba(26,127,232,0.8)' : 'rgba(26,127,232,0.3)', borderRadius: anomH ? '0' : '2px 2px 0 0', minHeight: 3 }} title={`Normal: ${bar.normal}`} />
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+                  {[0, 6, 12, 18, 23].map(h => <span key={h} style={{ fontSize: 9, color: 'var(--muted)' }}>{String(h).padStart(2, '0')}:00</span>)}
+                </div>
+                <div style={{ display: 'flex', gap: 14, marginTop: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: 'var(--muted)' }}>
+                    <div style={{ width: 10, height: 8, background: 'rgba(26,127,232,0.4)', borderRadius: 2 }} /> Normal activity
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: 'var(--muted)' }}>
+                    <div style={{ width: 10, height: 8, background: 'rgba(239,68,68,0.7)', borderRadius: 2 }} /> Anomaly detected
+                  </div>
+                </div>
+              </div>
 
               {/* Incident Queue */}
               <Section title="⚠ Active Incident Queue">
@@ -373,6 +644,7 @@ export default function DashboardScreen() {
                       <div style={{ display: 'flex', gap: 6 }}>
                         <button onClick={() => openModal(inc)} style={smallBtn}>Investigate</button>
                         <button onClick={() => generateReport(inc)} style={smallBtn}>📥</button>
+                        <button onClick={() => openAlertManager(inc)} style={{ ...smallBtn, color: 'var(--warn)' }}>📧</button>
                       </div>
                     </div>
                   ))}
@@ -428,6 +700,7 @@ export default function DashboardScreen() {
         </div>
       </div>
     </AppLayout>
+    </>
   );
 }
 
