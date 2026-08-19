@@ -1,9 +1,15 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Note: Removed 'output: export' to enable server-side features (NextAuth, API routes)
-  // For static export, remove API routes and 'use server' code before exporting
-  images: { unoptimized: true },
+  // Static export for Netlify (no server-side rendering)
+  output: 'export',
+  // Optimize images for static hosting
+  images: {
+    unoptimized: true,
+    formats: ['image/avif', 'image/webp'],
+  },
+  // Disable static generation for dynamic routes
+  staticPageGenerationTimeout: 60,
 };
 
 export default nextConfig;

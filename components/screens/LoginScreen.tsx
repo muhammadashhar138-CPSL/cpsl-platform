@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { signIn } from 'next-auth/react';
 import { useStore } from '@/lib/store';
 
 export default function LoginScreen() {
@@ -11,6 +10,13 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Client-side authentication (no server API required)
+  const validateCredentials = (email: string, password: string) => {
+    const testEmail = 'test@cpsl.co.uk';
+    const testPassword = 'demo123456';
+    return email === testEmail && password === testPassword;
+  };
+
   const login = async () => {
     if (!email || !pass) {
       setError('Please enter both email and password');
@@ -18,28 +24,16 @@ export default function LoginScreen() {
     }
     setError('');
     setLoading(true);
-    try {
-      const result = await signIn('credentials', {
-        email,
-        password: pass,
-        redirect: false,
-      });
 
-      if (result?.error) {
-        setError('Invalid credentials. Try the demo account.');
-        setLoading(false);
-        return;
-      }
+    // Simulate login delay
+    await new Promise(resolve => setTimeout(resolve, 500));
 
-      if (result?.ok) {
-        dispatch({ type: 'SET_USER', user: { name: 'User', email } });
-        dispatch({ type: 'SET_AUTHENTICATED', isAuthenticated: true });
-        dispatch({ type: 'SET_SCREEN', screen: 'multiSite' });
-      }
-    } catch (err) {
-      setError('Login failed. Please try again.');
-      console.error('Login error:', err);
-    } finally {
+    if (validateCredentials(email, pass)) {
+      dispatch({ type: 'SET_USER', user: { name: 'User', email } });
+      dispatch({ type: 'SET_AUTHENTICATED', isAuthenticated: true });
+      dispatch({ type: 'SET_SCREEN', screen: 'multiSite' });
+    } else {
+      setError('Invalid credentials. Use test@cpsl.co.uk / demo123456');
       setLoading(false);
     }
   };
@@ -47,24 +41,19 @@ export default function LoginScreen() {
   const demoLogin = async () => {
     setError('');
     setLoading(true);
-    try {
-      const result = await signIn('credentials', {
-        email: process.env.NEXT_PUBLIC_TEST_ACCOUNT_EMAIL || 'test@cpsl.co.uk',
-        password: process.env.NEXT_PUBLIC_TEST_ACCOUNT_PASSWORD || 'demo123456',
-        redirect: false,
-      });
 
-      if (result?.ok) {
-        dispatch({ type: 'SET_USER', user: { name: 'Demo User', email: process.env.NEXT_PUBLIC_TEST_ACCOUNT_EMAIL || 'test@cpsl.co.uk' } });
-        dispatch({ type: 'SET_AUTHENTICATED', isAuthenticated: true });
-        dispatch({ type: 'SET_SCREEN', screen: 'multiSite' });
-      } else {
-        setError('Demo login failed');
-      }
-    } catch (err) {
-      setError('Demo login error');
-      console.error('Demo login error:', err);
-    } finally {
+    // Simulate login delay
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    const testEmail = 'test@cpsl.co.uk';
+    const testPassword = 'demo123456';
+
+    if (validateCredentials(testEmail, testPassword)) {
+      dispatch({ type: 'SET_USER', user: { name: 'Demo User', email: testEmail } });
+      dispatch({ type: 'SET_AUTHENTICATED', isAuthenticated: true });
+      dispatch({ type: 'SET_SCREEN', screen: 'multiSite' });
+    } else {
+      setError('Demo login failed');
       setLoading(false);
     }
   };
